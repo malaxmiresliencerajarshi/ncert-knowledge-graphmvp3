@@ -814,7 +814,7 @@ selected_hub = st.sidebar.selectbox(
 )
 
 show_grade6 = st.sidebar.checkbox("Include Grade 6", value=False)
-show_activities = st.sidebar.checkbox("Show Activities", value=False)
+show_activities = st.sidebar.checkbox("Show Activities", value=True)
 
 st.sidebar.markdown("---")
 st.sidebar.header("🧠 Node Details")
