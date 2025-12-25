@@ -10,7 +10,7 @@ from collections import defaultdict
 st.set_page_config(page_title="NCERT Curriculum Knowledge Graph", layout="wide")
 
 st.title("📘 NCERT Curriculum Knowledge Graph")
-st.caption("Curriculum-aware knowledge graph for Grades 7–8 Science")
+st.caption("Clean, curriculum-first knowledge graph for Grades 7–8")
 
 # --------------------------------------------------
 # 🔴 PASTE YOUR FULL JSON HERE
@@ -27,18 +27,6 @@ INT_JSON = """
       "context": "This concept is a fundamental building block within the Motion & Force module of the NCERT curriculum."
     }
   },
-
-{
-  "source": "Phases of the Moon",
-  "target": "Light & Sound",
-  "relation": "is_part_of",
-  "grade": "8",
-  "metadata": {
-    "learning_outcome": "Understanding how the changing positions of the Earth, Moon, and Sun cause different visible phases of the Moon.",
-    "context": "This concept explains that moon phases are due to the reflection of sunlight and the relative positions of celestial bodies."
-  }
-},
-
   {
     "source": "Motion",
     "target": "Motion & Force",
@@ -709,7 +697,18 @@ INT_JSON = """
       "context": "This concept is a fundamental building block within the Plants module of the NCERT curriculum."
     }
   },
-  {
+{
+  "source": "Phases of the Moon",
+  "target": "Light & Sound",
+  "relation": "is_part_of",
+  "grade": "8",
+  "metadata": {
+    "learning_outcome": "Understanding how the changing positions of the Earth, Moon, and Sun cause different visible phases of the Moon.",
+    "context": "This concept explains that moon phases are due to the reflection of sunlight and the relative positions of celestial bodies."
+  }
+},
+  
+{
     "source": "Magnetic Effect of Electric Current",
     "target": "Electricity & Magnetism",
     "relation": "is_part_of",
@@ -793,11 +792,11 @@ INT_JSON = """
 try:
     data = json.loads(INT_JSON)
 except Exception:
-    st.error("❌ Invalid JSON. Please check formatting.")
+    st.error("❌ Invalid JSON format")
     st.stop()
 
 # --------------------------------------------------
-# FIXED CURRICULUM HUB ONTOLOGY
+# CURRICULUM HUBS
 # --------------------------------------------------
 TOPIC_HUBS = [
     "Motion & Force", "Light & Sound", "Electricity & Magnetism", "Heat",
@@ -806,50 +805,46 @@ TOPIC_HUBS = [
     "Plants", "Ecosystem"
 ]
 
-EDGE_COLORS = {
-    "causes": "red",
-    "prerequisite_for": "purple",
-    "applied_in": "green",
-    "related_to": "gray",
-    "is_part_of": "blue",
-    "connects_to": "darkgray"
-}
-
 # --------------------------------------------------
-# SIDEBAR FILTERS
+# SIDEBAR CONTROLS
 # --------------------------------------------------
-st.sidebar.header("🔍 Graph Controls")
+st.sidebar.header("🎛 View Controls")
 
 selected_hub = st.sidebar.selectbox(
     "Focus on Topic Hub",
     ["All"] + TOPIC_HUBS
 )
 
-show_grade6 = st.sidebar.checkbox("Include Grade 6", value=False)
-show_activities = st.sidebar.checkbox("Show Activities", value=True)
+show_secondary = st.sidebar.checkbox(
+    "Show secondary connections",
+    value=False,
+    help="Includes cross-topic and application links"
+)
 
 st.sidebar.markdown("---")
 st.sidebar.header("🧠 Node Details")
 
 # --------------------------------------------------
-# BUILD GRAPH + METADATA INDEX
+# GRAPH + METADATA
 # --------------------------------------------------
 G = nx.Graph()
-
 node_info = defaultdict(lambda: {
     "grades": set(),
     "hubs": set(),
     "learning_outcomes": set(),
-    "contexts": set(),
-    "relations": set()
+    "contexts": set()
 })
 
-def is_activity(name):
-    return name.startswith("Activity:")
+activity_nodes = set()
 
+def is_activity(name):
+    return name.lower().startswith("activity")
+
+# Add hubs first
 for hub in TOPIC_HUBS:
     G.add_node(hub, type="hub")
 
+# Build graph
 for item in data:
     src = item["source"]
     tgt = item["target"]
@@ -857,19 +852,20 @@ for item in data:
     grade = item["grade"]
     metadata = item.get("metadata", {})
 
-    if grade == "6" and not show_grade6:
-        continue
-    if is_activity(src) and not show_activities:
-        continue
-
     G.add_node(src)
     G.add_node(tgt)
+
+    # Progressive disclosure
+    if relation in ["related_to", "applied_in"] and not show_secondary:
+        continue
+
     G.add_edge(src, tgt, relation=relation)
 
-    # ---- metadata aggregation ----
-    node_info[src]["grades"].add(grade)
-    node_info[src]["relations"].add(relation)
+    if is_activity(src):
+        activity_nodes.add(src)
 
+    # Metadata aggregation
+    node_info[src]["grades"].add(grade)
     if tgt in TOPIC_HUBS:
         node_info[src]["hubs"].add(tgt)
 
@@ -879,94 +875,35 @@ for item in data:
     if metadata.get("context"):
         node_info[src]["contexts"].add(metadata["context"])
 
-# Filter by hub
+# Hub focus (but keep all activities)
 if selected_hub != "All" and selected_hub in G:
     hub_nodes = set(nx.node_connected_component(G, selected_hub))
-
-    # ALWAYS keep all activities
     final_nodes = hub_nodes.union(activity_nodes)
-
     G = G.subgraph(final_nodes).copy()
 
 # --------------------------------------------------
-# CONVERT TO AGRAPH FORMAT
+# VISUAL RENDERING (CLEAN & BOLD)
 # --------------------------------------------------
 nodes = []
 edges = []
 
 for node in G.nodes():
+    # HUBS — very bold
     if node in TOPIC_HUBS:
-        nodes.append(Node(id=node, label=node, size=38, color="#f1c232"))
+        nodes.append(Node(
+            id=node,
+            label=node,
+            size=50,
+            color="#f1c232",
+            font={"size": 24, "bold": True}
+        ))
+
+    # ACTIVITIES — quiet, small
     elif is_activity(node):
-        nodes.append(Node(id=node, label=node, size=12, color="#b7b7b7"))
-    else:
-        nodes.append(Node(id=node, label=node, size=20, color="#6fa8dc"))
-
-for u, v, attrs in G.edges(data=True):
-    edges.append(
-        Edge(
-            source=u,
-            target=v,
-            label=attrs.get("relation", ""),
-            color=EDGE_COLORS.get(attrs.get("relation", ""), "gray")
-        )
-    )
-
-config = Config(
-    width="100%",
-    height=750,
-    directed=False,
-    physics=True
-)
-
-# --------------------------------------------------
-# RENDER GRAPH + CAPTURE SELECTION
-# --------------------------------------------------
-selected = agraph(nodes=nodes, edges=edges, config=config)
-
-# --------------------------------------------------
-# SIDEBAR METADATA PANEL (THIS IS THE CHANGE)
-# --------------------------------------------------
-if selected:
-    st.sidebar.subheader(selected)
-
-    if selected in TOPIC_HUBS:
-        st.sidebar.info("Curriculum Topic Hub")
-    else:
-        info = node_info.get(selected, {})
-
-        if info["grades"]:
-            st.sidebar.markdown(f"**Grade(s):** {', '.join(sorted(info['grades']))}")
-
-        if info["hubs"]:
-            st.sidebar.markdown(f"**Parent Hub(s):** {', '.join(info['hubs'])}")
-
-        if info["learning_outcomes"]:
-            st.sidebar.markdown("**Learning Outcomes:**")
-            for lo in info["learning_outcomes"]:
-                st.sidebar.markdown(f"- {lo}")
-
-        if info["contexts"]:
-            st.sidebar.markdown("**Curriculum Context:**")
-            for ctx in info["contexts"]:
-                st.sidebar.markdown(f"- {ctx}")
-
-        neighbors = list(G.neighbors(selected))
-        if neighbors:
-            st.sidebar.markdown("**Connected Concepts:**")
-            st.sidebar.write(", ".join(neighbors))
-else:
-    st.sidebar.info("Click a node to see its details here.")
-
-# --------------------------------------------------
-# LEGEND (MAIN AREA)
-# --------------------------------------------------
-st.markdown("""
-### 📌 How to read this graph
-- **Gold nodes** → Curriculum Topic Hubs  
-- **Blue nodes** → Scientific concepts  
-- **Grey nodes** → Activities  
-- **Colored edges** → Relationship types  
-
-This graph represents **curriculum structure**, not textbook order.
-""")
+        nodes.append(Node(
+            id=node,
+            label=node.replace("Activity:", "").strip(),
+            size=10,
+            color="#d0d0d0",
+            opacity=0.6,
+            font={"size": 10}
