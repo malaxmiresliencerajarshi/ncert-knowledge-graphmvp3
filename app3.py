@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import networkx as nx
 from streamlit_agraph import agraph, Node, Edge, Config
+from collections import defaultdict
 
 # --------------------------------------------------
 # STREAMLIT CONFIG
@@ -13,7 +14,6 @@ st.caption("Curriculum-aware knowledge graph for Grades 7–8 Science")
 
 # --------------------------------------------------
 # 🔴 PASTE YOUR FULL JSON HERE
-# (Original JSON + Cross-Hub Bridges)
 # --------------------------------------------------
 INT_JSON = """
 [
@@ -812,21 +812,31 @@ show_grade6 = st.sidebar.checkbox("Include Grade 6", value=False)
 show_activities = st.sidebar.checkbox("Show Activities", value=False)
 
 # --------------------------------------------------
-# BUILD GRAPH
+# BUILD GRAPH + METADATA INDEX
 # --------------------------------------------------
 G = nx.Graph()
 
-for hub in TOPIC_HUBS:
-    G.add_node(hub, type="hub")
+# Node-centric metadata store
+node_info = defaultdict(lambda: {
+    "grades": set(),
+    "hubs": set(),
+    "learning_outcomes": set(),
+    "contexts": set(),
+    "relations": set()
+})
 
 def is_activity(name):
     return name.startswith("Activity:")
+
+for hub in TOPIC_HUBS:
+    G.add_node(hub, type="hub")
 
 for item in data:
     src = item["source"]
     tgt = item["target"]
     relation = item["relation"]
     grade = item["grade"]
+    metadata = item.get("metadata", {})
 
     if grade == "6" and not show_grade6:
         continue
@@ -836,6 +846,19 @@ for item in data:
     G.add_node(src)
     G.add_node(tgt)
     G.add_edge(src, tgt, relation=relation)
+
+    # ---- metadata aggregation (THIS IS THE FIX) ----
+    node_info[src]["grades"].add(grade)
+    node_info[src]["relations"].add(relation)
+
+    if tgt in TOPIC_HUBS:
+        node_info[src]["hubs"].add(tgt)
+
+    if metadata.get("learning_outcome"):
+        node_info[src]["learning_outcomes"].add(metadata["learning_outcome"])
+
+    if metadata.get("context"):
+        node_info[src]["contexts"].add(metadata["context"])
 
 # Filter by hub
 if selected_hub != "All" and selected_hub in G:
@@ -850,20 +873,19 @@ edges = []
 
 for node in G.nodes():
     if node in TOPIC_HUBS:
-        nodes.append(Node(id=node, label=node, size=35, color="#f1c232"))
+        nodes.append(Node(id=node, label=node, size=38, color="#f1c232"))
     elif is_activity(node):
-        nodes.append(Node(id=node, label=node, size=10, color="#b7b7b7"))
+        nodes.append(Node(id=node, label=node, size=12, color="#b7b7b7"))
     else:
-        nodes.append(Node(id=node, label=node, size=18, color="#6fa8dc"))
+        nodes.append(Node(id=node, label=node, size=20, color="#6fa8dc"))
 
 for u, v, attrs in G.edges(data=True):
-    relation = attrs.get("relation", "")
     edges.append(
         Edge(
             source=u,
             target=v,
-            label=relation,
-            color=EDGE_COLORS.get(relation, "gray")
+            label=attrs.get("relation", ""),
+            color=EDGE_COLORS.get(attrs.get("relation", ""), "gray")
         )
     )
 
@@ -871,23 +893,60 @@ config = Config(
     width="100%",
     height=750,
     directed=False,
-    physics=True,
-    hierarchical=False
+    physics=True
 )
 
-agraph(nodes=nodes, edges=edges, config=config)
+# --------------------------------------------------
+# RENDER GRAPH + CAPTURE SELECTION
+# --------------------------------------------------
+selected = agraph(nodes=nodes, edges=edges, config=config)
+
+# --------------------------------------------------
+# 🧠 METADATA EXPLANATION PANEL (ROBUST)
+# --------------------------------------------------
+st.markdown("---")
+st.subheader("🧠 Concept Details")
+
+if selected:
+    st.markdown(f"### {selected}")
+
+    if selected in TOPIC_HUBS:
+        st.info("This is a **curriculum Topic Hub** that anchors related concepts.")
+    else:
+        info = node_info.get(selected, {})
+
+        if info["grades"]:
+            st.markdown(f"**Grade(s):** {', '.join(sorted(info['grades']))}")
+
+        if info["hubs"]:
+            st.markdown(f"**Parent Topic Hub(s):** {', '.join(info['hubs'])}")
+
+        if info["learning_outcomes"]:
+            st.markdown("**Learning Outcomes:**")
+            for lo in info["learning_outcomes"]:
+                st.markdown(f"- {lo}")
+
+        if info["contexts"]:
+            st.markdown("**Curriculum Context:**")
+            for ctx in info["contexts"]:
+                st.markdown(f"- {ctx}")
+
+        neighbors = list(G.neighbors(selected))
+        if neighbors:
+            st.markdown("**Connected Concepts:**")
+            st.write(", ".join(neighbors))
+else:
+    st.info("Click any node in the graph to view its curriculum metadata.")
 
 # --------------------------------------------------
 # LEGEND
 # --------------------------------------------------
 st.markdown("""
-### 🧠 How to read this graph
+### 📌 How to read this graph
 - **Gold nodes** → Curriculum Topic Hubs  
 - **Blue nodes** → Scientific concepts  
 - **Grey nodes** → Activities  
-- **Red edges** → Causes  
-- **Purple edges** → Prerequisites  
-- **Green edges** → Applications  
+- **Colored edges** → Type of relationship  
 
-This graph represents **curriculum logic**, not textbook order.
+This graph represents **curriculum structure**, not textbook order.
 """)
