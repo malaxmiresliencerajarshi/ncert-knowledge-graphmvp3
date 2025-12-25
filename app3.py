@@ -907,3 +907,88 @@ for node in G.nodes():
             color="#d0d0d0",
             opacity=0.6,
             font={"size": 10}
+        ))
+
+    # CONCEPTS — clear, readable
+    else:
+        nodes.append(Node(
+            id=node,
+            label=node,
+            size=22,
+            color="#6fa8dc",
+            font={"size": 14}
+        ))
+
+# Edges (minimal, structural emphasis)
+for u, v, attrs in G.edges(data=True):
+    relation = attrs.get("relation", "")
+
+    if relation == "is_part_of":
+        color = "#2c7be5"
+        width = 3
+    else:
+        color = "#b0b0b0"
+        width = 1
+
+    edges.append(Edge(
+        source=u,
+        target=v,
+        color=color,
+        width=width
+    ))
+
+# Physics tuned for spacing
+config = Config(
+    width="100%",
+    height=750,
+    directed=False,
+    physics=True,
+    nodeHighlightBehavior=True,
+    highlightColor="#ffe599",
+    collapsible=True
+)
+
+selected = agraph(nodes=nodes, edges=edges, config=config)
+
+# --------------------------------------------------
+# SIDEBAR METADATA
+# --------------------------------------------------
+if selected:
+    st.sidebar.subheader(selected)
+
+    if selected in TOPIC_HUBS:
+        st.sidebar.info("Curriculum Topic Hub")
+    else:
+        info = node_info.get(selected, {})
+
+        if info["grades"]:
+            st.sidebar.markdown(f"**Grade(s):** {', '.join(sorted(info['grades']))}")
+
+        if info["hubs"]:
+            st.sidebar.markdown(f"**Parent Hub(s):** {', '.join(info['hubs'])}")
+
+        if info["learning_outcomes"]:
+            st.sidebar.markdown("**Learning Outcomes:**")
+            for lo in info["learning_outcomes"]:
+                st.sidebar.markdown(f"- {lo}")
+
+        if info["contexts"]:
+            st.sidebar.markdown("**Context:**")
+            for ctx in info["contexts"]:
+                st.sidebar.markdown(f"- {ctx}")
+else:
+    st.sidebar.info("Click a node to see details")
+
+# --------------------------------------------------
+# LEGEND
+# --------------------------------------------------
+st.markdown("""
+### 📌 How to read this graph
+- **Gold** → Topic Hubs (big ideas)
+- **Blue** → Core scientific concepts
+- **Grey** → Activities (learning aids)
+- **Bold blue edges** → Curriculum structure
+- **Thin grey edges** → Secondary connections
+
+This view prioritizes **curriculum clarity over visual density**.
+""")
