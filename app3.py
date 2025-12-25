@@ -804,19 +804,26 @@ EDGE_COLORS = {
 }
 
 # --------------------------------------------------
-# SIDEBAR CONTROLS
+# SIDEBAR FILTERS
 # --------------------------------------------------
 st.sidebar.header("🔍 Graph Controls")
-selected_hub = st.sidebar.selectbox("Focus on Topic Hub", ["All"] + TOPIC_HUBS)
+
+selected_hub = st.sidebar.selectbox(
+    "Focus on Topic Hub",
+    ["All"] + TOPIC_HUBS
+)
+
 show_grade6 = st.sidebar.checkbox("Include Grade 6", value=False)
 show_activities = st.sidebar.checkbox("Show Activities", value=False)
+
+st.sidebar.markdown("---")
+st.sidebar.header("🧠 Node Details")
 
 # --------------------------------------------------
 # BUILD GRAPH + METADATA INDEX
 # --------------------------------------------------
 G = nx.Graph()
 
-# Node-centric metadata store
 node_info = defaultdict(lambda: {
     "grades": set(),
     "hubs": set(),
@@ -847,7 +854,7 @@ for item in data:
     G.add_node(tgt)
     G.add_edge(src, tgt, relation=relation)
 
-    # ---- metadata aggregation (THIS IS THE FIX) ----
+    # ---- metadata aggregation ----
     node_info[src]["grades"].add(grade)
     node_info[src]["relations"].add(relation)
 
@@ -902,51 +909,48 @@ config = Config(
 selected = agraph(nodes=nodes, edges=edges, config=config)
 
 # --------------------------------------------------
-# 🧠 METADATA EXPLANATION PANEL (ROBUST)
+# SIDEBAR METADATA PANEL (THIS IS THE CHANGE)
 # --------------------------------------------------
-st.markdown("---")
-st.subheader("🧠 Concept Details")
-
 if selected:
-    st.markdown(f"### {selected}")
+    st.sidebar.subheader(selected)
 
     if selected in TOPIC_HUBS:
-        st.info("This is a **curriculum Topic Hub** that anchors related concepts.")
+        st.sidebar.info("Curriculum Topic Hub")
     else:
         info = node_info.get(selected, {})
 
         if info["grades"]:
-            st.markdown(f"**Grade(s):** {', '.join(sorted(info['grades']))}")
+            st.sidebar.markdown(f"**Grade(s):** {', '.join(sorted(info['grades']))}")
 
         if info["hubs"]:
-            st.markdown(f"**Parent Topic Hub(s):** {', '.join(info['hubs'])}")
+            st.sidebar.markdown(f"**Parent Hub(s):** {', '.join(info['hubs'])}")
 
         if info["learning_outcomes"]:
-            st.markdown("**Learning Outcomes:**")
+            st.sidebar.markdown("**Learning Outcomes:**")
             for lo in info["learning_outcomes"]:
-                st.markdown(f"- {lo}")
+                st.sidebar.markdown(f"- {lo}")
 
         if info["contexts"]:
-            st.markdown("**Curriculum Context:**")
+            st.sidebar.markdown("**Curriculum Context:**")
             for ctx in info["contexts"]:
-                st.markdown(f"- {ctx}")
+                st.sidebar.markdown(f"- {ctx}")
 
         neighbors = list(G.neighbors(selected))
         if neighbors:
-            st.markdown("**Connected Concepts:**")
-            st.write(", ".join(neighbors))
+            st.sidebar.markdown("**Connected Concepts:**")
+            st.sidebar.write(", ".join(neighbors))
 else:
-    st.info("Click any node in the graph to view its curriculum metadata.")
+    st.sidebar.info("Click a node to see its details here.")
 
 # --------------------------------------------------
-# LEGEND
+# LEGEND (MAIN AREA)
 # --------------------------------------------------
 st.markdown("""
 ### 📌 How to read this graph
 - **Gold nodes** → Curriculum Topic Hubs  
 - **Blue nodes** → Scientific concepts  
 - **Grey nodes** → Activities  
-- **Colored edges** → Type of relationship  
+- **Colored edges** → Relationship types  
 
 This graph represents **curriculum structure**, not textbook order.
 """)
