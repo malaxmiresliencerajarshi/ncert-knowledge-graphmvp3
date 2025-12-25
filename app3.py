@@ -869,8 +869,12 @@ for item in data:
 
 # Filter by hub
 if selected_hub != "All" and selected_hub in G:
-    nodes = nx.node_connected_component(G, selected_hub)
-    G = G.subgraph(nodes).copy()
+    hub_nodes = set(nx.node_connected_component(G, selected_hub))
+
+    # ALWAYS keep all activities
+    final_nodes = hub_nodes.union(activity_nodes)
+
+    G = G.subgraph(final_nodes).copy()
 
 # --------------------------------------------------
 # CONVERT TO AGRAPH FORMAT
