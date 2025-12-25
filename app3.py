@@ -1,17 +1,12 @@
 import streamlit as st
 import json
 import networkx as nx
-from pyvis.network import Network
-import tempfile
-import os
+from streamlit_agraph import agraph, Node, Edge, Config
 
 # --------------------------------------------------
 # STREAMLIT CONFIG
 # --------------------------------------------------
-st.set_page_config(
-    page_title="NCERT Curriculum Knowledge Graph",
-    layout="wide"
-)
+st.set_page_config(page_title="NCERT Curriculum Knowledge Graph", layout="wide")
 
 st.title("📘 NCERT Curriculum Knowledge Graph")
 st.caption("Curriculum-aware knowledge graph for Grades 7–8 Science")
@@ -779,14 +774,13 @@ INT_JSON = """
 
 ]
 """
-# --------------------------------------------------
 
 # --------------------------------------------------
 # LOAD JSON
 # --------------------------------------------------
 try:
     data = json.loads(INT_JSON)
-except Exception as e:
+except Exception:
     st.error("❌ Invalid JSON. Please check formatting.")
     st.stop()
 
@@ -794,43 +788,27 @@ except Exception as e:
 # FIXED CURRICULUM HUB ONTOLOGY
 # --------------------------------------------------
 TOPIC_HUBS = [
-    "Motion & Force",
-    "Light & Sound",
-    "Electricity & Magnetism",
-    "Heat",
-    "Matter & Materials",
-    "Chemical Changes",
-    "Acids, Bases & Salts",
-    "Living Organisms",
-    "Food & Nutrition",
-    "Human Body",
-    "Plants",
-    "Ecosystem"
+    "Motion & Force", "Light & Sound", "Electricity & Magnetism", "Heat",
+    "Matter & Materials", "Chemical Changes", "Acids, Bases & Salts",
+    "Living Organisms", "Food & Nutrition", "Human Body",
+    "Plants", "Ecosystem"
 ]
 
-# --------------------------------------------------
-# EDGE COLOR SCHEMA (NEW)
-# --------------------------------------------------
 EDGE_COLORS = {
-    "causes": "#e74c3c",           # red
-    "prerequisite_for": "#8e44ad", # purple
-    "applied_in": "#27ae60",       # green
-    "related_to": "#95a5a6",       # grey
-    "is_part_of": "#2980b9",       # blue
-    "connects_to": "#7f8c8d"       # dark grey
+    "causes": "red",
+    "prerequisite_for": "purple",
+    "applied_in": "green",
+    "related_to": "gray",
+    "is_part_of": "blue",
+    "connects_to": "darkgray"
 }
 
 # --------------------------------------------------
 # SIDEBAR CONTROLS
 # --------------------------------------------------
 st.sidebar.header("🔍 Graph Controls")
-
-selected_hub = st.sidebar.selectbox(
-    "Focus on Topic Hub",
-    ["All"] + TOPIC_HUBS
-)
-
-show_grade6 = st.sidebar.checkbox("Include Grade 6 Concepts", value=False)
+selected_hub = st.sidebar.selectbox("Focus on Topic Hub", ["All"] + TOPIC_HUBS)
+show_grade6 = st.sidebar.checkbox("Include Grade 6", value=False)
 show_activities = st.sidebar.checkbox("Show Activities", value=False)
 
 # --------------------------------------------------
@@ -838,109 +816,78 @@ show_activities = st.sidebar.checkbox("Show Activities", value=False)
 # --------------------------------------------------
 G = nx.Graph()
 
-# Add hub anchors first
 for hub in TOPIC_HUBS:
-    G.add_node(
-        hub,
-        node_type="hub",
-        size=50,
-        color="#f1c232"  # gold
-    )
+    G.add_node(hub, type="hub")
 
-def classify_node(name):
-    if name in TOPIC_HUBS:
-        return "hub", "#f1c232", 50
-    if name.startswith("Activity:"):
-        return "activity", "#b7b7b7", 10
-    return "concept", "#6fa8dc", 18
+def is_activity(name):
+    return name.startswith("Activity:")
 
 for item in data:
-    src = item.get("source")
-    tgt = item.get("target")
-    relation = item.get("relation")
-    grade = item.get("grade")
+    src = item["source"]
+    tgt = item["target"]
+    relation = item["relation"]
+    grade = item["grade"]
 
     if grade == "6" and not show_grade6:
         continue
-
-    if src.startswith("Activity:") and not show_activities:
+    if is_activity(src) and not show_activities:
         continue
 
-    src_type, src_color, src_size = classify_node(src)
-    tgt_type, tgt_color, tgt_size = classify_node(tgt)
+    G.add_node(src)
+    G.add_node(tgt)
+    G.add_edge(src, tgt, relation=relation)
 
-    if not G.has_node(src):
-        G.add_node(src, node_type=src_type, color=src_color, size=src_size)
-
-    if not G.has_node(tgt):
-        G.add_node(tgt, node_type=tgt_type, color=tgt_color, size=tgt_size)
-
-    G.add_edge(src, tgt, label=relation)
+# Filter by hub
+if selected_hub != "All" and selected_hub in G:
+    nodes = nx.node_connected_component(G, selected_hub)
+    G = G.subgraph(nodes).copy()
 
 # --------------------------------------------------
-# FILTER BY HUB
+# CONVERT TO AGRAPH FORMAT
 # --------------------------------------------------
-if selected_hub != "All":
-    connected_nodes = nx.node_connected_component(G, selected_hub)
-    G = G.subgraph(connected_nodes).copy()
+nodes = []
+edges = []
 
-# --------------------------------------------------
-# RENDER GRAPH (WITH COLORED EDGES)
-# --------------------------------------------------
-net = Network(
-    height="750px",
-    width="100%",
-    bgcolor="#ffffff",
-    font_color="#000000"
-)
-
-for node, attrs in G.nodes(data=True):
-    net.add_node(
-        node,
-        label=node,
-        size=attrs.get("size", 15),
-        color=attrs.get("color", "#cccccc")
-    )
+for node in G.nodes():
+    if node in TOPIC_HUBS:
+        nodes.append(Node(id=node, label=node, size=35, color="#f1c232"))
+    elif is_activity(node):
+        nodes.append(Node(id=node, label=node, size=10, color="#b7b7b7"))
+    else:
+        nodes.append(Node(id=node, label=node, size=18, color="#6fa8dc"))
 
 for u, v, attrs in G.edges(data=True):
-    relation = attrs.get("label", "")
-    net.add_edge(
-        u,
-        v,
-        title=relation,
-        color=EDGE_COLORS.get(relation, "#cccccc")
+    relation = attrs.get("relation", "")
+    edges.append(
+        Edge(
+            source=u,
+            target=v,
+            label=relation,
+            color=EDGE_COLORS.get(relation, "gray")
+        )
     )
 
-net.repulsion(
-    node_distance=180,
-    central_gravity=0.2,
-    spring_length=200,
-    spring_strength=0.05,
-    damping=0.9
+config = Config(
+    width="100%",
+    height=750,
+    directed=False,
+    physics=True,
+    hierarchical=False
 )
 
-with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
-    net.save_graph(tmp.name)
-    html_path = tmp.name
-
-st.components.v1.html(open(html_path).read(), height=750)
-os.remove(html_path)
+agraph(nodes=nodes, edges=edges, config=config)
 
 # --------------------------------------------------
-# EXPLANATION PANEL
+# LEGEND
 # --------------------------------------------------
-st.markdown("### 🧠 How to read this graph")
 st.markdown("""
+### 🧠 How to read this graph
 - **Gold nodes** → Curriculum Topic Hubs  
 - **Blue nodes** → Scientific concepts  
 - **Grey nodes** → Activities  
-- **Red edges** → Causality  
-- **Purple edges** → Learning prerequisites  
-- **Green edges** → Real-world applications  
-- **Grey edges** → Conceptual relationships  
+- **Red edges** → Causes  
+- **Purple edges** → Prerequisites  
+- **Green edges** → Applications  
 
 This graph represents **curriculum logic**, not textbook order.
 """)
-
-st.markdown("---")
-st.markdown("Built using Google AI Studio + Streamlit")
