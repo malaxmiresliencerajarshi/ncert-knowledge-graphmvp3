@@ -27,6 +27,18 @@ INT_JSON = """
       "context": "This concept is a fundamental building block within the Motion & Force module of the NCERT curriculum."
     }
   },
+
+{
+  "source": "Phases of the Moon",
+  "target": "Light & Sound",
+  "relation": "is_part_of",
+  "grade": "8",
+  "metadata": {
+    "learning_outcome": "Understanding how the changing positions of the Earth, Moon, and Sun cause different visible phases of the Moon.",
+    "context": "This concept explains that moon phases are due to the reflection of sunlight and the relative positions of celestial bodies."
+  }
+},
+
   {
     "source": "Motion",
     "target": "Motion & Force",
